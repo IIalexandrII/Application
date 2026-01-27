@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 # Путь к твоей TorchScript-модели
-model_path = "best.torchscript"
+model_path = "best2.torchscript"
 
 # Загружаем модель через Ultralytics
 model = YOLO(model_path)

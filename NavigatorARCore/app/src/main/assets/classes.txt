@@ -1,0 +1,1 @@
+Light,Trafic,Person,Scooter,Open_Manhole,Door,Stairs,Car,Bus,Bicycle,Trash_Cans
