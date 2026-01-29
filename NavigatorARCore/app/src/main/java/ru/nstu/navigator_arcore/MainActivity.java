@@ -6,12 +6,13 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.util.Log;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
-import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -22,6 +23,11 @@ import androidx.core.view.WindowInsetsCompat;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Config;
 import com.google.ar.core.Session;
+import com.google.ar.core.exceptions.CameraNotAvailableException;
+import com.google.ar.core.exceptions.UnavailableApkTooOldException;
+import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
+import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
+import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 
 import java.io.File;
@@ -32,28 +38,38 @@ import java.io.InputStream;
 import ru.nstu.navigator_arcore.renderer.ARCoreRenderer;
 import ru.nstu.navigator_arcore.tools.OverlayView;
 
-
 public class MainActivity extends AppCompatActivity {
+    //---------------------------------------------LOGCAT
+    private final String TAG = "LOG.E";
+    private final String START_MESSAGE = "MainActivity";
+
+    //---------------------------------------------Permissions
     private final int REQUEST_PERMISSION_CODE = 102030;
     private final String[] REQUIRED_PERMISSIONS = new String[] {"android.permission.CAMERA"};
 
-    private TextView reqText;
-    private GLSurfaceView glSurfaceView;
-    private Session mSession = null;
-    private boolean mUserRequestedInstall = true;
-
-    private Model YOLOModel;
-    private OverlayView overlayView;
-
-    //--------------------------------------------------------
+    //---------------------------------------------Load File
     private static final int PICK_MODEL_FILE = 1001;
     private static final int PICK_CLASSES_FILE = 1002;
     private Uri modelUri;
     private Uri classesUri;
 
-    private boolean rendererInitialized = false;
-    //--------------------------------------------------------
+    //---------------------------------------------ARCore
+    private Session mSession;
+    private ARCoreRenderer arcRenderer;
+    private boolean installARCoreRequested = true;
 
+    //---------------------------------------------Model
+    private Model YOLOModel;
+    private final String assetsFileModel = "best.torchscript";
+    private final String assetsFileClasses = "classes.txt";
+    private File tempModelFile;
+    private File tempClassesFile;
+
+    //---------------------------------------------UI
+    private OverlayView overlayView;
+    private GLSurfaceView glSurfaceView;
+    private TextView reqText;
+    private TextView loadModelText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,131 +81,63 @@ public class MainActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
-        this.reqText = findViewById(R.id.reqText);
-        this.overlayView = findViewById(R.id.overlay);
-        this._checkARSupport();
-        findViewById(R.id.btnPickModel).setOnClickListener(event->{
-            pickModelFile();
-        });
+
         this.glSurfaceView = findViewById(R.id.glSurfaceView);
-//        try {
-//            this.YOLOModel = new Model("best.torchscript","classes.txt", this);
-//        }catch (Exception e){
-//            Log.e("Error LOG.E", "MainActivity (onCreate): "+e.getMessage());
-//        }
-    }
+        this.overlayView   = findViewById(R.id.overlay);
+        this.reqText       = findViewById(R.id.reqText);
+        this.loadModelText = findViewById(R.id.loadModelText);
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if(!this._checkPermission()){
-            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_PERMISSION_CODE);
-        }
-        try {
-            if (mSession == null) {
-                ArCoreApk.InstallStatus installStatus = ArCoreApk.getInstance().requestInstall(this, mUserRequestedInstall);
+        this.arcRenderer = new ARCoreRenderer(this.overlayView, this);
+        setupGlSurfaceView();
 
-                switch (installStatus) {
-                    case INSTALLED:
-                        mSession = new Session(this);
-                        Config config = new Config(mSession);
-                        mSession.configure(config);
-//                        this._setupRenderer();
-                        trySetupRenderer();
-                        break;
-
-                    case INSTALL_REQUESTED:
-                        mUserRequestedInstall = false;
-                        reqText.setText("Установка ARCore...");
-                        reqText.setVisibility(TextView.VISIBLE);
-                        break;
-                }
+        findViewById(R.id.btnUseAssetsFile).setOnClickListener(event->{
+            try{
+                this.YOLOModel = new Model(this.assetsFileModel,this.assetsFileClasses, this, true);
+                this.arcRenderer.setModel(this.YOLOModel);
+                this.loadModelText.setText("Загруженно из ASSETS");
+            }catch (Exception e){
+                Log.e(this.TAG, this.START_MESSAGE + " (onCreate): ", e);
             }
-            if(mSession != null) mSession.resume();
-            if (rendererInitialized) {
-                glSurfaceView.onResume();
-            }
-
-        } catch (UnavailableUserDeclinedInstallationException e) {
-            reqText.setText("Для работы приложения требуется ARCore");
-            reqText.setVisibility(TextView.VISIBLE);
-            Toast.makeText(this, "Установите Google Play Services for AR из Play Маркета", Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            reqText.setText("Ошибка инициализации ARCore");
-            reqText.setVisibility(TextView.VISIBLE);
-            Log.e("Error LOG.E", "MainActivity (onResume): "+e.getMessage());
-        }
+        });
+        findViewById(R.id.btnPickModel).setOnClickListener(event->{
+            pickModelLauncher.launch(createPickModelIntent());
+        });
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if(mSession != null) mSession.pause();
-        if (rendererInitialized) glSurfaceView.onPause();
+    //---------------------------------------------Loading from external storage
+    private final ActivityResultLauncher<Intent> pickClassesLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                            classesUri = result.getData().getData();
+                            loadExternalModel();
+                        }
+                    });
+    private final ActivityResultLauncher<Intent> pickModelLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                            modelUri = result.getData().getData();
+                            pickClassesLauncher.launch(createPickClassesIntent());
+                        }
+                    });
 
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if(mSession != null) mSession.close();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        if (requestCode == REQUEST_PERMISSION_CODE) {
-            if (!this._checkPermission()) {
-                reqText.setText("Для работы приложения требуется доступ к камере");
-                Toast.makeText(this, "Разрешите доступ к камере в настройках", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-
-    private void _setupRenderer(){
-        this.glSurfaceView.setEGLContextClientVersion(2);
-        this.glSurfaceView.setPreserveEGLContextOnPause(true);
-        this.glSurfaceView.setRenderer(new ARCoreRenderer(mSession, this.YOLOModel, this.overlayView, this));
-        this.glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
-    }
-    private boolean _checkPermission(){
-        for(String perm : REQUIRED_PERMISSIONS){
-            if(ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) return false;
-        }
-        return true;
-    }
-    private boolean _checkARSupport(){
-        ArCoreApk.Availability availability = ArCoreApk.getInstance().checkAvailability(this);
-        if (availability.isUnsupported()){
-            this.reqText.setText("ARCore не поддерживается на этом устройстве");
-            return false;
-        }
-        this.reqText.setVisibility(TextView.INVISIBLE);
-        return true;
-    }
-
-    private void pickModelFile() {
+    private Intent createPickModelIntent() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
-        startActivityForResult(intent, PICK_MODEL_FILE);
+        return intent;
     }
-
-    private void pickClassesFile() {
+    private Intent createPickClassesIntent() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("text/plain");
-        startActivityForResult(intent, PICK_CLASSES_FILE);
+        return intent;
     }
 
-    private File copyUriToInternal(Uri uri, String fileName) throws IOException {
-        File outFile = new File(getFilesDir(), fileName);
-
+    private File copyUriToCache(Uri uri, String fileName) throws IOException {
+        File outFile = new File(getCacheDir(), fileName);
         try (InputStream in = getContentResolver().openInputStream(uri);
              FileOutputStream out = new FileOutputStream(outFile)) {
-
-            byte[] buffer = new byte[4096];
+            byte[] buffer = new byte[8192];
             int read;
             while ((read = in.read(buffer)) != -1) {
                 out.write(buffer, 0, read);
@@ -197,63 +145,151 @@ public class MainActivity extends AppCompatActivity {
         }
         return outFile;
     }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (resultCode != Activity.RESULT_OK || data == null) return;
-
-        if (requestCode == PICK_MODEL_FILE) {
-            modelUri = data.getData();
-            pickClassesFile();
-            return;
-        }
-
-        if (requestCode == PICK_CLASSES_FILE) {
-            classesUri = data.getData();
-        }
-
+    private void loadExternalModel() {
         if (modelUri != null && classesUri != null) {
             try {
-                File modelFile = copyUriToInternal(modelUri, "model.torchscript");
-                File classesFile = copyUriToInternal(classesUri, "classes.txt");
+                // Copy to cache
+                tempModelFile = copyUriToCache(modelUri, "tempModel.torchscript");
+                tempClassesFile = copyUriToCache(classesUri, "tempClasses.txt");
 
-                YOLOModel = new Model(
-                        modelFile.getAbsolutePath(),
-                        classesFile.getAbsolutePath(),
-                        this
-                );
+                // Load PyTorch model
+                YOLOModel = new Model(tempModelFile.getAbsolutePath(), tempClassesFile.getAbsolutePath(),this,false);
 
-                trySetupRenderer();
+                if (arcRenderer != null) arcRenderer.setModel(YOLOModel);
+
+                loadModelText.setText("Загружено: " + getFileNameFromUri(modelUri));
 
             } catch (Exception e) {
-                Log.e("Error LOG.E", "MainActivity (onActivityResult)" + e.getMessage());
+                Log.e(TAG, "Error loading external model", e);
             }
         }
     }
+    private void deleteTempFile(File file) {
+        if (file != null && file.exists()) {
+            boolean deleted = file.delete();
+            if (!deleted) Log.w(TAG, "Failed to delete temp file: " + file.getAbsolutePath());
+        }
+    }
+    private String getFileNameFromUri(Uri uri) {
+        String result = null;
+        if ("content".equals(uri.getScheme())) {
+            try (android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (index != -1) {
+                        result = cursor.getString(index);
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, START_MESSAGE + " Failed to get file name from uri", e);
+            }
+        }
 
-    private void trySetupRenderer() {
-        if (rendererInitialized) return;
+        if (result == null) {
+            result = uri.getLastPathSegment();
+        }
+        return result;
+    }
+    //---------------------------------------------
+
+    private boolean _checkPermission(){
+        for(String perm : REQUIRED_PERMISSIONS){
+            if(ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) return false;
+        }
+        return true;
+    }
+
+    private void setupGlSurfaceView() {
+        glSurfaceView.setEGLContextClientVersion(2);
+        glSurfaceView.setPreserveEGLContextOnPause(true);
+        glSurfaceView.setRenderer(this.arcRenderer);
+        glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+    }
+
+    @Override
+    protected void onResume(){
+        super.onResume();
 
         if (mSession == null) {
-            Log.d("Renderer", "Session not ready");
+            Exception exception = null;
+            String message = null;
+            try {
+                ArCoreApk.Availability availability = ArCoreApk.getInstance().checkAvailability(this);
+                if (availability != ArCoreApk.Availability.SUPPORTED_INSTALLED) {
+                    switch (ArCoreApk.getInstance().requestInstall(this, !installARCoreRequested)) {
+                        case INSTALL_REQUESTED:
+                            installARCoreRequested = false;
+                            return;
+                        case INSTALLED:
+                            break;
+                    }
+                }
+
+                if (!_checkPermission()) {
+                    ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_PERMISSION_CODE);
+                    return;
+                }
+
+                mSession = new Session(this);
+                this.arcRenderer.setSession(mSession);
+            } catch (UnavailableArcoreNotInstalledException | UnavailableUserDeclinedInstallationException e) {
+                message = "Please install ARCore";
+                exception = e;
+            } catch (UnavailableApkTooOldException e) {
+                message = "Please update ARCore";
+                exception = e;
+            } catch (UnavailableDeviceNotCompatibleException e) {
+                message = "This device does not support AR";
+                exception = e;
+            } catch (Exception e) {
+                message = "Failed to create AR session";
+                exception = e;
+            }
+
+            if (message != null) {
+                reqText.setText(message);
+                Log.e(TAG, START_MESSAGE + " Exception creating session", exception);
+                return;
+            }
+        }
+
+        try {
+            Config config = new Config(mSession);
+            if (mSession.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                config.setDepthMode(Config.DepthMode.AUTOMATIC);
+            } else {
+                config.setDepthMode(Config.DepthMode.DISABLED);
+            }
+            mSession.configure(config);
+            mSession.resume();
+        } catch (CameraNotAvailableException e) {
+            reqText.setText("Camera not available. Try restarting the app.");
+            mSession = null;
             return;
         }
 
-        if (YOLOModel == null) {
-            Log.d("Renderer", "YOLOModel not ready");
-            return;
+        glSurfaceView.onResume();
+    }
+
+    @Override
+    protected void onDestroy() {
+        deleteTempFile(tempModelFile);
+        deleteTempFile(tempClassesFile);
+
+        if(mSession != null){
+           mSession.close();
+           mSession = null;
         }
 
-        if (glSurfaceView == null) {
-            Log.d("Renderer", "GLSurfaceView not ready");
-            return;
+        super.onDestroy();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (mSession != null) {
+            glSurfaceView.onPause();
+            mSession.pause();
         }
-
-        _setupRenderer();
-        rendererInitialized = true;
-
-        Log.d("Renderer", "Renderer successfully initialized");
     }
 }

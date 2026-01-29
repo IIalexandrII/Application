@@ -1,8 +1,5 @@
 package ru.nstu.navigator_arcore;
 
-import ru.nstu.navigator_arcore.tools.BoundingBox;
-import ru.nstu.navigator_arcore.tools.PostProcessor;
-
 import android.app.Activity;
 import android.content.Context;
 import android.media.Image;
@@ -21,38 +18,36 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
+import ru.nstu.navigator_arcore.tools.BoundingBox;
+import ru.nstu.navigator_arcore.tools.PostProcessor;
 
 public class Model {
     Module module;
     Activity activity;
     public String[] Classes;
-//    Model(String fileNameModel, String fileNameClasses, Context context) throws Exception {
-//        if (!(context instanceof Activity)) {
-//            Log.e("Error LOG.E", "class Model (constructor): context is not Activity");
-//            throw new Exception("class Model (constructor): context is not Activity");
-//        }
-//        this.activity = (Activity) context;
-//        try {
-//            this._loadModelFromFile(fileNameModel);
-//            this._loadClassesFromFile(fileNameClasses);
-//        } catch (Exception e) {
-//            Log.e("Error LOG.E", "Model (Constructor): " + e.getMessage());
-//        }
-//    }
-
-    Model(String modelPath, String classesPath, Context context) throws Exception {
+    Model(String modelPath, String classesPath, Context context, boolean useAssets) throws Exception {
         if (!(context instanceof Activity)) {
             Log.e("Error LOG.E", "class Model (constructor): context is not Activity");
             throw new Exception("Context is not Activity");
         }
         this.activity = (Activity) context;
 
-        this._loadModelFromPath(modelPath);
-        this._loadClassesFromPath(classesPath);
+        if (useAssets){
+            try {
+                this._loadModelFromAssets(modelPath);
+                this._loadClassesFromAssets(classesPath);
+            } catch (Exception e) {
+                Log.e("Error LOG.E", "Model (Constructor): " + e.getMessage());
+            }
+        }else {
+            this._loadModelFromPath(modelPath);
+            this._loadClassesFromPath(classesPath);
+        }
     }
-
+    // LOAD MODEL -----------------------------------------------
     private void _loadModelFromPath(String path) throws IOException {
         File modelFile = new File(path);
         if (!modelFile.exists()) {
@@ -60,7 +55,6 @@ public class Model {
         }
         module = Module.load(modelFile.getAbsolutePath());
     }
-
     private void _loadClassesFromPath(String path) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
             String line = reader.readLine();
@@ -73,7 +67,7 @@ public class Model {
         }
     }
 
-    private void _loadModelFromFile(String fileName) throws IOException {
+    private void _loadModelFromAssets(String fileName) throws IOException {
         File modelFile = new File(this.activity.getFilesDir(), fileName);
 
         if (!modelFile.exists()) {
@@ -102,7 +96,7 @@ public class Model {
             throw new IOException("Failed to load PyTorch model: " + e.getMessage());
         }
     }
-    private void _loadClassesFromFile(String fileName) throws IOException {
+    private void _loadClassesFromAssets(String fileName) throws IOException {
         try (InputStream inputStream = this.activity.getAssets().open(fileName); BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
             String line;
 
@@ -129,6 +123,7 @@ public class Model {
 
         }
     }
+// ----------------------------------------------------------
 
     public List<BoundingBox> analyzeImage(Image image, int rotation) {
         Tensor input = TensorImageUtils.imageYUV420CenterCropToFloat32Tensor(
@@ -144,7 +139,14 @@ public class Model {
         float[] data = out.getDataAsFloatArray();
         long[] shape = out.shape();
 
-        return PostProcessor.process(
+        Log.i("YOLO", "Output shape: " + Arrays.toString(shape));
+        Log.i("YOLO", "Sample cx cy w h: "
+                + data[0] + " "
+                + data[1] + " "
+                + data[2] + " "
+                + data[3]);
+
+        return PostProcessor.processFlat(
                 data,
                 shape,
                 640,
@@ -152,5 +154,4 @@ public class Model {
                 image.getHeight()
         );
     }
-
 }

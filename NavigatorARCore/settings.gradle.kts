@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Navigator-ARCore"
+rootProject.name = "navigator_arcore"
 include(":app")
  
