@@ -60,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
 
     //---------------------------------------------Model
     private Model YOLOModel;
-    private final String assetsFileModel = "best.torchscript";
+    private final String assetsFileModel = "best.pte";
     private final String assetsFileClasses = "classes.txt";
     private File tempModelFile;
     private File tempClassesFile;

@@ -2,13 +2,15 @@ package ru.nstu.navigator_arcore;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.media.Image;
 import android.util.Log;
 
-import org.pytorch.IValue;
-import org.pytorch.Module;
-import org.pytorch.Tensor;
-import org.pytorch.torchvision.TensorImageUtils;
+import org.pytorch.executorch.EValue;
+import org.pytorch.executorch.Module;
+import org.pytorch.executorch.Tensor;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -21,13 +23,28 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import ru.nstu.navigator_arcore.modelTools.TensorImageUtils;
+import ru.nstu.navigator_arcore.modelTools.YuvToRgbConverter;
 import ru.nstu.navigator_arcore.tools.BoundingBox;
 import ru.nstu.navigator_arcore.tools.PostProcessor;
 
 public class Model {
     Module module;
-    Activity activity;
     public String[] Classes;
+
+    private static final int IN_W = 640;
+    private static final int IN_H = 640;
+
+    private Bitmap rgbBitmap = null;
+    private Bitmap inputBitmap = null;
+    private Canvas inputCanvas = null;
+
+    private final Rect srcRect = new Rect();
+    private final Rect dstRect = new Rect(0, 0, IN_W, IN_H);
+
+    private final YuvToRgbConverter yuvToRgb;
+
+    private final Activity activity;
     Model(String modelPath, String classesPath, Context context, boolean useAssets) throws Exception {
         if (!(context instanceof Activity)) {
             Log.e("Error LOG.E", "class Model (constructor): context is not Activity");
@@ -46,7 +63,13 @@ public class Model {
             this._loadModelFromPath(modelPath);
             this._loadClassesFromPath(classesPath);
         }
+
+        this.yuvToRgb = new YuvToRgbConverter(context);
+
+        inputBitmap = Bitmap.createBitmap(IN_W, IN_H, Bitmap.Config.ARGB_8888);
+        inputCanvas = new Canvas(inputBitmap);
     }
+
     // LOAD MODEL -----------------------------------------------
     private void _loadModelFromPath(String path) throws IOException {
         File modelFile = new File(path);
@@ -126,32 +149,43 @@ public class Model {
 // ----------------------------------------------------------
 
     public List<BoundingBox> analyzeImage(Image image, int rotation) {
-        Tensor input = TensorImageUtils.imageYUV420CenterCropToFloat32Tensor(
-                image,
-                rotation,
-                640, 640,
-                TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
-                TensorImageUtils.TORCHVISION_NORM_STD_RGB
-        );
+        final int camW = image.getWidth();
+        final int camH = image.getHeight();
 
-        Tensor out = module.forward(IValue.from(input)).toTensor();
+        if (rgbBitmap == null || rgbBitmap.getWidth() != camW || rgbBitmap.getHeight() != camH) {
+            rgbBitmap = Bitmap.createBitmap(camW, camH, Bitmap.Config.ARGB_8888);
+        }
+
+        yuvToRgb.yuvToRgb(image, rgbBitmap);
+
+        int cropSize = Math.min(camW, camH);
+        int cropX = (camW - cropSize) / 2;
+        int cropY = (camH - cropSize) / 2;
+
+        srcRect.set(cropX, cropY, cropX + cropSize, cropY + cropSize);
+
+        inputCanvas.drawBitmap(rgbBitmap, srcRect, dstRect, null);
+
+        Tensor input = TensorImageUtils.bitmapToFloat32Tensor(inputBitmap, TensorImageUtils.TORCHVISION_NORM_MEAN_RGB, TensorImageUtils.TORCHVISION_NORM_STD_RGB);
+
+        Tensor out = module.forward(EValue.from(input))[0].toTensor();
 
         float[] data = out.getDataAsFloatArray();
         long[] shape = out.shape();
 
-        Log.i("YOLO", "Output shape: " + Arrays.toString(shape));
-        Log.i("YOLO", "Sample cx cy w h: "
-                + data[0] + " "
-                + data[1] + " "
-                + data[2] + " "
-                + data[3]);
+        List<BoundingBox> tempBoxes = PostProcessor.processFlat(data, shape, 640, cropSize, cropSize);
 
-        return PostProcessor.processFlat(
-                data,
-                shape,
-                640,
-                image.getWidth(),
-                image.getHeight()
-        );
+        for (BoundingBox b : tempBoxes) {
+            if (b == null || b.rect == null) continue;
+
+            b.rect.offset(cropX, cropY);
+
+            if (b.rect.left < 0) b.rect.left = 0;
+            if (b.rect.top < 0) b.rect.top = 0;
+            if (b.rect.right > camW) b.rect.right = camW;
+            if (b.rect.bottom > camH) b.rect.bottom = camH;
+        }
+
+        return tempBoxes;
     }
 }

@@ -46,8 +46,10 @@ dependencies {
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
 
-    implementation("org.pytorch:pytorch_android:2.1.0")
-    implementation("org.pytorch:pytorch_android_torchvision:2.1.0")
+//    implementation("org.pytorch:pytorch_android:2.1.0")
+//    implementation("org.pytorch:pytorch_android_torchvision:2.1.0")
+
+    implementation("org.pytorch:executorch-android:1.1.0")
 
     implementation("com.google.ar:core:1.33.0")
 }
