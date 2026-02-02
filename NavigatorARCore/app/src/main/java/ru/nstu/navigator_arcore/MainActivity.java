@@ -280,7 +280,10 @@ public class MainActivity extends AppCompatActivity {
            mSession.close();
            mSession = null;
         }
-
+        if(YOLOModel != null){
+            YOLOModel.destroy();
+            YOLOModel = null;
+        }
         super.onDestroy();
     }
 

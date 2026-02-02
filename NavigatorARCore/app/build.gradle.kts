@@ -19,7 +19,7 @@ android {
     }
 
     androidResources {
-        noCompress += "torchscript"
+        noCompress += "pte"
     }
 
     buildTypes {

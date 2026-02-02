@@ -6,6 +6,7 @@ import android.media.Image;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.util.Log;
+import android.widget.TextView;
 
 import com.google.ar.core.Coordinates2d;
 import com.google.ar.core.Frame;
@@ -20,10 +21,24 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 import ru.nstu.navigator_arcore.Model;
+import ru.nstu.navigator_arcore.R;
 import ru.nstu.navigator_arcore.tools.BoundingBox;
 import ru.nstu.navigator_arcore.tools.OverlayView;
 
 public class ARCoreRenderer implements GLSurfaceView.Renderer {
+    //test
+    private long arLastTimeNs = 0;
+    private int arFrameCount = 0;
+    private float arFps = 0f;
+    private TextView textFPS;
+    private String fpsSTR = "ARCore FPS: %.1f | YOLO FPS: %.1f";
+
+    // Inference FPS
+    private long mdLastTimeNs = 0;
+    private int mdFrameCount = 0;
+    private volatile float mdFps = 0f;
+    //-----------------------
+
     private final String TAG = "LOG.E";
     private boolean cameraTextureSet = false;
 
@@ -44,6 +59,7 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
     public ARCoreRenderer(OverlayView overlay, Context context){
         this.context = context;
         this.overlay = overlay;
+        this.textFPS = ((Activity) this.context).findViewById(R.id.FPSText);
     }
 
     public void setModel(Model model) {
@@ -76,6 +92,20 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
         if (session == null) return;
 
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+
+        long nowNs = System.nanoTime();
+
+        if (arLastTimeNs == 0) {
+            arLastTimeNs = nowNs;
+        }
+
+        arFrameCount++;
+        long diffNs = nowNs - arLastTimeNs;
+        if (diffNs >= 1_000_000_000L) { // 1 сек
+            arFps = arFrameCount * 1_000_000_000f / diffNs;
+            arFrameCount = 0;
+            arLastTimeNs = nowNs;
+        }
 
         try {
             // добавить FPS
@@ -174,6 +204,25 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
                     } catch (Exception e) {
                         Log.e(TAG, "ARCoreRenderer (onDrawFrame) errorInference error", e);
                     } finally {
+                        long now = System.nanoTime();
+                        if (mdLastTimeNs == 0) {
+                            mdLastTimeNs = now;
+                        }
+
+                        mdFrameCount++;
+                        long diff = now - mdLastTimeNs;
+
+                        if (diff >= 1_000_000_000L) {
+                            mdFps = mdFrameCount * 1_000_000_000f / diff;
+                            mdFrameCount = 0;
+                            mdLastTimeNs = now;
+
+                            ((Activity) context).runOnUiThread(() -> {
+                                textFPS.setText(String.format(fpsSTR, arFps, mdFps));
+                            });
+                        }
+
+
                         inferenceBusy = false;
                         cameraImage.close();
                     }
