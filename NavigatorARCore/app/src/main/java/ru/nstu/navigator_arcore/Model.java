@@ -74,9 +74,6 @@ public class Model {
         inputCanvas = new Canvas(inputBitmap);
 
 //        this.debugImage = this.activity.findViewById(R.id.debugImage);
-
-
-
     }
 
     // LOAD MODEL -----------------------------------------------
@@ -164,19 +161,15 @@ public class Model {
         module.destroy();
     }
 
-    public List<BoundingBox> analyzeImage(Image image, int rotation) {
+    public List<BoundingBox> analyzeImage(Bitmap image, int origCamW, int origCamH, int rotation) {
         long allTime = System.nanoTime();
         int camW = image.getWidth();
         int camH = image.getHeight();
         if (rgbBitmap == null || rgbBitmap.getWidth() != camW || rgbBitmap.getHeight() != camH) {
             rgbBitmap = Bitmap.createBitmap(camW, camH, Bitmap.Config.ARGB_8888);
         }
-        yuvToRgb.yuvToRgb(image, rgbBitmap);
-
-        Bitmap srcBitmap = ImageTools.rotateBitmap(rgbBitmap, rotation);
-        srcBitmap = ImageTools.noiseDetect(srcBitmap);
-        camW = srcBitmap.getWidth();
-        camH = srcBitmap.getHeight();
+        camW = image.getWidth();
+        camH = image.getHeight();
 
         int cropSize = Math.min(camW, camH);
         int cropX = (camW - cropSize) / 2;
@@ -184,10 +177,10 @@ public class Model {
 
         srcRect.set(cropX, cropY, cropX + cropSize, cropY + cropSize);
 
-        inputCanvas.drawBitmap(srcBitmap, srcRect, dstRect, null);
+        inputCanvas.drawBitmap(image, srcRect, dstRect, null);
 
 //        activity.runOnUiThread(() -> {
-//            debugImage.setImageBitmap(inputBitmap);
+//            debugImage.setImageBitmap(image);
 //        });
 
 
@@ -206,6 +199,7 @@ public class Model {
             if (b == null || b.rect == null) continue;
 
             b.rect.offset(cropX, cropY);
+            b.rect = ImageTools.undoRotate(b.rect, origCamW, origCamH, ImageTools.getTotalRotation(rotation));
 
             if (b.rect.left < 0) b.rect.left = 0;
             if (b.rect.top < 0) b.rect.top = 0;

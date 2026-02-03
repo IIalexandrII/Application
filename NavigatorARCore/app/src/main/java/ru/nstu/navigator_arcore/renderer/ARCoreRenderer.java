@@ -2,6 +2,8 @@ package ru.nstu.navigator_arcore.renderer;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.RectF;
 import android.media.Image;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
@@ -23,7 +25,9 @@ import javax.microedition.khronos.opengles.GL10;
 import ru.nstu.navigator_arcore.Model;
 import ru.nstu.navigator_arcore.R;
 import ru.nstu.navigator_arcore.tools.BoundingBox;
+import ru.nstu.navigator_arcore.tools.ImageTools;
 import ru.nstu.navigator_arcore.tools.OverlayView;
+import ru.nstu.navigator_arcore.tools.YuvToRgbConverter;
 
 public class ARCoreRenderer implements GLSurfaceView.Renderer {
     //test
@@ -56,10 +60,17 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
     private volatile boolean inferenceBusy = false;
     private final ExecutorService inferenceExecutor = Executors.newSingleThreadExecutor();
 
+    private final int bufferSize = 5;
+    private Bitmap[] bufferImages = new Bitmap[bufferSize];
+    private int bufferCurrentSize = 0;
+
+    private YuvToRgbConverter yuvToRgb;
+
     public ARCoreRenderer(OverlayView overlay, Context context){
         this.context = context;
         this.overlay = overlay;
         this.textFPS = ((Activity) this.context).findViewById(R.id.FPSText);
+        this.yuvToRgb = new YuvToRgbConverter(this.context);
     }
 
     public void setModel(Model model) {
@@ -192,15 +203,30 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
             } catch (Exception e) {
                 return;
             }
+            Bitmap currentBitmap = Bitmap.createBitmap(cameraImage.getWidth(), cameraImage.getHeight(), Bitmap.Config.ARGB_8888);
+            if(cameraImage != null) {
+                yuvToRgb.yuvToRgb(cameraImage, currentBitmap);
+                currentBitmap = ImageTools.rotateBitmap(currentBitmap, rotation);
 
-            if (!inferenceBusy) {
+                if (this.bufferCurrentSize < this.bufferSize) {
+                    this.bufferImages[this.bufferCurrentSize] = currentBitmap;
+                    this.bufferCurrentSize += 1;
+                } else {
+                    for (int i = 1; i < this.bufferImages.length; i++) {
+                        this.bufferImages[i - 1] = this.bufferImages[i];
+                    }
+                    this.bufferImages[this.bufferImages.length - 1] = currentBitmap;
+                    currentBitmap = ImageTools.noiseDetect(this.bufferImages);
+                }
+            }
+
+            if (!inferenceBusy && this.bufferCurrentSize == this.bufferSize) {
                 inferenceBusy = true;
-
+                Bitmap finalCurrentBitmap = currentBitmap;
                 inferenceExecutor.execute(() -> {
                     try {
-                        List<BoundingBox> boxesImg = model.analyzeImage(cameraImage, rotation);
+                        List<BoundingBox> boxesImg = model.analyzeImage(finalCurrentBitmap, cameraImage.getWidth(), cameraImage.getHeight(), rotation);
                         lastBoxesImage = (boxesImg != null) ? boxesImg : new ArrayList<>();
-
                     } catch (Exception e) {
                         Log.e(TAG, "ARCoreRenderer (onDrawFrame) errorInference error", e);
                     } finally {
@@ -336,4 +362,5 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
         b.distanceMeters = imgBox.distanceMeters;
         return b;
     }
+
 }
