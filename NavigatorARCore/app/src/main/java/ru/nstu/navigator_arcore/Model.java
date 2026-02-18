@@ -5,9 +5,9 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
-import android.media.Image;
 import android.util.Log;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import org.pytorch.executorch.EValue;
 import org.pytorch.executorch.Module;
@@ -21,17 +21,20 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import ru.nstu.navigator_arcore.modelTools.TensorImageUtils;
 import ru.nstu.navigator_arcore.tools.ImageTools;
-import ru.nstu.navigator_arcore.tools.YuvToRgbConverter;
 import ru.nstu.navigator_arcore.tools.BoundingBox;
 import ru.nstu.navigator_arcore.modelTools.PostProcessor;
 
 public class Model {
     private Module module;
     public String[] Classes;
+
+    private String backend;
 
     private static final int IN_W = 640;
     private static final int IN_H = 640;
@@ -43,11 +46,12 @@ public class Model {
     private final Rect srcRect = new Rect();
     private final Rect dstRect = new Rect(0, 0, IN_W, IN_H);
 
-    private final YuvToRgbConverter yuvToRgb;
-
     // testing
-    private ImageView debugImage;
+//    private ImageView debugImage;
 
+
+    private String LATtext = "(ms) Func LAT: %d | forward LAT: %d";
+    private TextView LATTextView;
     private final Activity activity;
     Model(String modelPath, String classesPath, Context context, boolean useAssets) throws Exception {
         if (!(context instanceof Activity)) {
@@ -68,12 +72,14 @@ public class Model {
             this._loadClassesFromPath(classesPath);
         }
 
-        this.yuvToRgb = new YuvToRgbConverter(context);
+        Log.d("TESTTEST", Arrays.toString(this.getUsageBackend()));
+        this.backend = this.getUsageBackend()[0];
 
         inputBitmap = Bitmap.createBitmap(IN_W, IN_H, Bitmap.Config.ARGB_8888);
         inputCanvas = new Canvas(inputBitmap);
 
 //        this.debugImage = this.activity.findViewById(R.id.debugImage);
+        this.LATTextView = this.activity.findViewById(R.id.yoloFpsText);
     }
 
     // LOAD MODEL -----------------------------------------------
@@ -86,6 +92,7 @@ public class Model {
     }
     private void _loadClassesFromPath(String path) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+
             String line = reader.readLine();
             if (line == null) throw new IOException("Empty classes file");
 
@@ -141,6 +148,12 @@ public class Model {
                         }
                     }
                     Classes = classList.toArray(new String[0]);
+
+                    StringBuilder test = new StringBuilder();
+                    for (String aClass : Classes) {
+                        test.append(aClass).append(", ");
+                    }
+                    Log.d("TESTTEST", test.toString());
                     break;
                 }
             }
@@ -154,8 +167,8 @@ public class Model {
     }
 // ----------------------------------------------------------
 
-    public String getUsageBackend(){
-        return module.getMethodMetadata("forward").getBackends()[0];
+    public String[] getUsageBackend(){
+        return module.getMethodMetadata("forward").getBackends();
     }
     public void destroy(){
         module.destroy();
@@ -180,9 +193,8 @@ public class Model {
         inputCanvas.drawBitmap(image, srcRect, dstRect, null);
 
 //        activity.runOnUiThread(() -> {
-//            debugImage.setImageBitmap(image);
+//            debugImage.setImageBitmap(inputBitmap);
 //        });
-
 
         Tensor input = TensorImageUtils.bitmapToFloat32Tensor(inputBitmap, TensorImageUtils.TORCHVISION_NORM_MEAN_RGB, TensorImageUtils.TORCHVISION_NORM_STD_RGB);
         long forwardTime = System.nanoTime();
@@ -193,7 +205,12 @@ public class Model {
         float[] data = out.getDataAsFloatArray();
         long[] shape = out.shape();
 
-        List<BoundingBox> tempBoxes = PostProcessor.processFlat(data, shape, 640, cropSize, cropSize);
+        List<BoundingBox> tempBoxes;
+        if(Objects.equals(this.backend, "VulkanBackend")) {
+            tempBoxes = PostProcessor.processFlatVulkan(data, shape, 640, cropSize, cropSize);
+        }else{
+            tempBoxes = PostProcessor.processFlat(data, shape, 640, cropSize, cropSize);
+        }
 
         for (BoundingBox b : tempBoxes) {
             if (b == null || b.rect == null) continue;
@@ -207,7 +224,8 @@ public class Model {
             if (b.rect.bottom > camH) b.rect.bottom = camH;
         }
         long fTime = (System.nanoTime()-allTime)/1_000_000;
-        Log.d("TESTTEST", String.format("Forward Time: %d | func: %d | div: %d",forwardEndTime, fTime, fTime - forwardEndTime ));
+
+        this.activity.runOnUiThread(()->{this.LATTextView.setText(String.format(this.LATtext, fTime, forwardEndTime));});
         return tempBoxes;
     }
 

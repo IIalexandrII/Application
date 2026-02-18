@@ -19,6 +19,14 @@
         android:layout_height="match_parent"
         android:background="@android:color/transparent" />
 
+<!--    <ImageView-->
+<!--        android:id="@+id/debugImage"-->
+<!--        android:layout_width="200dp"-->
+<!--        android:layout_height="200dp"-->
+<!--        app:layout_constraintEnd_toEndOf="parent"-->
+<!--        app:layout_constraintTop_toTopOf="parent"-->
+<!--        android:background="#66000000"/>-->
+
     <TextView
         android:id="@+id/loadModelText"
         android:layout_width="wrap_content"
@@ -31,28 +39,31 @@
         android:textStyle="bold"
         android:text="Модель не загружена"
         android:textColor="@color/black"
+        android:textAlignment="center"
         />
 
     <TextView
-        android:id="@+id/FPSText"
+        android:id="@+id/arFpsText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:text="ARCore LAT:"
+        android:textColor="@color/black"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/yoloFpsText"
         app:layout_constraintTop_toBottomOf="@id/loadModelText"
         android:layout_marginTop="8dp"
-        android:text="ARCore FPS:  | YOLO FPS: "
-        android:textColor="@color/black"
         />
 
-
-<!--    <ImageView-->
-<!--        android:id="@+id/debugImage"-->
-<!--        android:layout_width="200dp"-->
-<!--        android:layout_height="200dp"-->
-<!--        app:layout_constraintEnd_toEndOf="parent"-->
-<!--        app:layout_constraintTop_toTopOf="parent"-->
-<!--        android:background="#66000000"/>-->
+    <TextView
+        android:id="@+id/yoloFpsText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="(ms) Func LAT:  | forward LAT: "
+        android:textColor="@color/black"
+        app:layout_constraintStart_toEndOf="@id/arFpsText"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/arFpsText"
+        />
 
 
     <TextView
@@ -65,6 +76,27 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="V 0.0.1-vulkan"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/btnUseAssetsFile"
+        android:layout_marginBottom="10dp"
+        android:layout_marginEnd="10dp"/>
+
+    <Button
+        android:id="@+id/btnSettings"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:circularflow_radiusInDP="100dp"
+        android:text="⚙"
+        android:textSize="22sp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/btnPickModel"
+        android:layout_marginStart="10dp"
+        android:layout_marginBottom="10dp"/>
 
     <Button
         android:id="@+id/btnPickModel"

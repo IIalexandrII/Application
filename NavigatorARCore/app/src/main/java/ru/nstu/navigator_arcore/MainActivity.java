@@ -8,11 +8,15 @@ import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -34,9 +38,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Objects;
 
+import ru.nstu.navigator_arcore.modelTools.PostProcessor;
 import ru.nstu.navigator_arcore.renderer.ARCoreRenderer;
 import ru.nstu.navigator_arcore.tools.OverlayView;
+import ru.nstu.navigator_arcore.tools.SimpleSeekListener;
 
 public class MainActivity extends AppCompatActivity {
     //---------------------------------------------LOGCAT
@@ -94,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
             try{
                 this.YOLOModel = new Model(this.assetsFileModel,this.assetsFileClasses, this, true);
                 this.arcRenderer.setModel(this.YOLOModel);
-                this.loadModelText.setText("Загруженно из ASSETS");
+                this.loadModelText.setText("Загруженно из ASSETS\n"+YOLOModel.getUsageBackend()[0]);
             }catch (Exception e){
                 Log.e(this.TAG, this.START_MESSAGE + " (onCreate): ", e);
             }
@@ -102,6 +109,57 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnPickModel).setOnClickListener(event->{
             pickModelLauncher.launch(createPickModelIntent());
         });
+
+        findViewById(R.id.btnSettings).setOnClickListener(v -> showSettingsDialog());
+    }
+
+    private void showSettingsDialog() {
+        View view = LayoutInflater.from(this)
+                .inflate(R.layout.dialog_settings, null);
+
+        SeekBar seekConfidence = view.findViewById(R.id.seekConfidence);
+        SeekBar seekIou = view.findViewById(R.id.seekIou);
+        SeekBar seekMax = view.findViewById(R.id.seekMax);
+
+        TextView txtConfidence = view.findViewById(R.id.txtConfidence);
+        TextView txtIou = view.findViewById(R.id.txtIou);
+        TextView txtMax = view.findViewById(R.id.txtMax);
+
+        // Устанавливаем текущие значения
+        seekConfidence.setProgress((int)(PostProcessor.getConfidenceThreshold() * 100));
+        seekIou.setProgress((int)(PostProcessor.getIouThreshold() * 100));
+        seekMax.setProgress(PostProcessor.getMaxDetections());
+
+        txtConfidence.setText(String.valueOf(PostProcessor.getConfidenceThreshold()));
+        txtIou.setText(String.valueOf(PostProcessor.getIouThreshold()));
+        txtMax.setText(String.valueOf(PostProcessor.getMaxDetections()));
+
+        // Listeners
+        seekConfidence.setOnSeekBarChangeListener(new SimpleSeekListener(value -> {
+            float v = value / 100f;
+            PostProcessor.setConfidenceThreshold(v);
+            txtConfidence.setText(String.format("%.2f", v));
+        }));
+
+        seekIou.setOnSeekBarChangeListener(new SimpleSeekListener(value -> {
+            float v = value / 100f;
+            PostProcessor.setIouThreshold(v);
+            txtIou.setText(String.format("%.2f", v));
+        }));
+
+        seekMax.setOnSeekBarChangeListener(new SimpleSeekListener(value -> {
+            PostProcessor.setMaxDetections(value);
+            txtMax.setText(String.valueOf(value));
+        }));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(view)
+                .setPositiveButton("OK", null)
+                .create();
+
+        dialog.show();
+
+        Objects.requireNonNull(dialog.getWindow()).setBackgroundDrawableResource(android.R.color.transparent);
     }
 
     //---------------------------------------------Loading from external storage
@@ -157,7 +215,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if (arcRenderer != null) arcRenderer.setModel(YOLOModel);
 
-                loadModelText.setText("Загружено: " + getFileNameFromUri(modelUri));
+                loadModelText.setText("Загружено: " + getFileNameFromUri(modelUri)+"\n"+YOLOModel.getUsageBackend()[0]);
 
             } catch (Exception e) {
                 Log.e(TAG, "Error loading external model", e);
@@ -260,6 +318,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 config.setDepthMode(Config.DepthMode.DISABLED);
             }
+            config.setFocusMode(Config.FocusMode.AUTO);
             mSession.configure(config);
             mSession.resume();
         } catch (CameraNotAvailableException e) {

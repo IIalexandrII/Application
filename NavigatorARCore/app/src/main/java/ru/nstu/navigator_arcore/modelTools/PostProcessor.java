@@ -13,13 +13,13 @@ import ru.nstu.navigator_arcore.tools.BoundingBox;
 public class PostProcessor {
 
     // Минимальная уверенность детекции. Всё, что ниже — считаю шумом
-    private static final float CONFIDENCE_THRESHOLD = 0.50f;
+    private static float CONFIDENCE_THRESHOLD = 0.5f;
 
     // Порог для NMS: если боксы сильно перекрываются — оставляю самый уверенный
-    private static final float IOU_THRESHOLD = 0.2f;
+    private static float IOU_THRESHOLD = 0.7f;
 
     // Ограничиваю число финальных детекций, чтобы не захламлять экран
-    private static final int MAX_DETECTIONS = 50;
+    private static int MAX_DETECTIONS = 50;
 
     /**
      * Разбираю выход YOLOv8 и превращаю его в список BoundingBox.
@@ -44,6 +44,15 @@ public class PostProcessor {
      *
      * На выходе получаю готовые боксы для отрисовки поверх камеры.
      */
+
+    public static void setConfidenceThreshold(float value) {CONFIDENCE_THRESHOLD = value;}
+    public static void setIouThreshold(float value) {IOU_THRESHOLD = value;}
+    public static void setMaxDetections(int value) {MAX_DETECTIONS = value;}
+
+    public static float getConfidenceThreshold() {return CONFIDENCE_THRESHOLD;}
+    public static float getIouThreshold() {return IOU_THRESHOLD;}
+    public static int getMaxDetections() {return MAX_DETECTIONS;}
+
     public static List<BoundingBox> process(float[][][] out, int inputSize, int imageW, int imageH) {
         if (out == null || out.length == 0 || out[0] == null) return new ArrayList<>();
 
@@ -211,6 +220,35 @@ public class PostProcessor {
     }
 
     // ---  TEST
+
+    public static List<BoundingBox> processFlatWithNMS(float[] data, long[] shape, int imageW, int imageH) {
+        int numDetections = (int) shape[1]; // 300
+        List<BoundingBox> candidates = new ArrayList<>();
+
+        for (int i = 0; i < numDetections; i++) {
+            int base = i * 6;
+            float x1 = data[base];
+            float y1 = data[base + 1];
+            float x2 = data[base + 2];
+            float y2 = data[base + 3];
+            float score = data[base + 4];
+            int cls = (int) data[base + 5];
+
+            if (score < CONFIDENCE_THRESHOLD) continue;
+
+            // Привожу координаты к пикселям view (если нужно)
+            x1 = clamp(x1 * imageW, 0, imageW);
+            y1 = clamp(y1 * imageH, 0, imageH);
+            x2 = clamp(x2 * imageW, 0, imageW);
+            y2 = clamp(y2 * imageH, 0, imageH);
+
+            candidates.add(new BoundingBox(new RectF(x1, y1, x2, y2), score, cls));
+        }
+
+        // NMS класс-осознанная
+        return nmsClassAware(candidates, IOU_THRESHOLD, MAX_DETECTIONS);
+    }
+
     public static List<BoundingBox> processFlat(float[] data, long[] shape, int inputSize, int imageW, int imageH) {
         if (shape.length != 3) return new ArrayList<>();
 
@@ -284,27 +322,92 @@ public class PostProcessor {
             float bottom = clamp(Math.max(y1, y2), 0, imageH);
 
             if (right - left < 2 || bottom - top < 2) continue;
-
             candidates.add(new BoundingBox(
                     new RectF(left, top, right, bottom),
                     bestScore,
                     bestClass
             ));
         }
-
+//        return candidates;
         return nmsClassAware(candidates, IOU_THRESHOLD, MAX_DETECTIONS);
     }
 
     private static float get(float[] data, long[] shape, boolean channelsFirst, int row, int col) {
-        int D1 = (int) shape[1];
-        int D2 = (int) shape[2];
+        int D1, D2;
 
-        if (channelsFirst) {
-            // [1][row][col]
-            return data[row * D2 + col];
-        } else {
-            // [1][col][row]
-            return data[col * D1 + row];
+        if(shape[1]<shape[2]){
+            D1 = (int) shape[1];
+            D2 = (int) shape[2];
+        }else{
+            D1 = (int) shape[2];
+            D2 = (int) shape[1];
         }
+        if (channelsFirst) {
+            int index = (row * D2 + col) >= data.length ? data.length-1 : (row * D2 + col);
+            // [1][row][col]
+            return data[index];
+        } else {
+            int index = (col * D1 + row) >= data.length ? data.length-1 : (col * D1 + row);
+            // [1][col][row]
+            return data[index];
+        }
+    }
+
+    public static List<BoundingBox> processFlatVulkan(
+            float[] data,
+            long[] shape,
+            int inputSize,
+            int imageW,
+            int imageH
+    ) {
+
+        if (shape.length != 3) return new ArrayList<>();
+
+        int numDetections = (int) shape[1]; // 300
+        int valuesPerDet = (int) shape[2];  // 6
+
+        if (valuesPerDet != 6) return new ArrayList<>();
+
+        List<BoundingBox> boxes = new ArrayList<>();
+
+        for (int i = 0; i < numDetections; i++) {
+
+            int base = i * 6;
+
+            float x1 = data[base];
+            float y1 = data[base + 1];
+            float x2 = data[base + 2];
+            float y2 = data[base + 3];
+            float score = data[base + 4];
+            int cls = (int) data[base + 5];
+
+            if (score < CONFIDENCE_THRESHOLD) continue;
+
+            // ⚠️ Координаты уже в пикселях 640x640
+            // Переводим к размеру текущего crop
+
+            float scaleX = (float) imageW / inputSize;
+            float scaleY = (float) imageH / inputSize;
+
+            x1 *= scaleX;
+            y1 *= scaleY;
+            x2 *= scaleX;
+            y2 *= scaleY;
+
+            x1 = clamp(x1, 0, imageW);
+            y1 = clamp(y1, 0, imageH);
+            x2 = clamp(x2, 0, imageW);
+            y2 = clamp(y2, 0, imageH);
+
+            if (x2 - x1 < 2 || y2 - y1 < 2) continue;
+
+            boxes.add(new BoundingBox(
+                    new RectF(x1, y1, x2, y2),
+                    score,
+                    cls
+            ));
+        }
+
+        return boxes; // NMS уже сделан моделью
     }
 }

@@ -1,0 +1,41 @@
+description: Ultralytics YOLO26n model trained on /home/kriveckiy/OI_dataset/yolo_openimages/dataset.yaml
+author: Ultralytics
+date: '2026-02-06T17:42:05.145003'
+version: 8.4.11
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: Person
+  1: Car
+  2: Bus
+  3: Bicycle
+  4: Dog
+  5: Traffic light
+  6: Traffic sign
+  7: Bench
+  8: Chair
+  9: Table
+  10: Door
+  11: Flowerpot
+  12: Waste container
+  13: Sofa bed
+  14: Truck
+  15: Motorcycle
+  16: Stairs
+  17: Lamp
+  18: Street light
+  19: Cabinetry
+  20: Filing cabinet
+  21: Computer monitor
+  22: Wardrobe
+  23: Stool
+args:
+  batch: 1
+channels: 3
+end2end: false

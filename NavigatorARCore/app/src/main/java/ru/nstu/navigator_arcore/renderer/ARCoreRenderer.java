@@ -31,16 +31,9 @@ import ru.nstu.navigator_arcore.tools.YuvToRgbConverter;
 
 public class ARCoreRenderer implements GLSurfaceView.Renderer {
     //test
-    private long arLastTimeNs = 0;
-    private int arFrameCount = 0;
-    private float arFps = 0f;
     private TextView textFPS;
-    private String fpsSTR = "ARCore FPS: %.1f | YOLO FPS: %.1f";
+    private String fpsSTR = "ARCore LAT: %d";
 
-    // Inference FPS
-    private long mdLastTimeNs = 0;
-    private int mdFrameCount = 0;
-    private volatile float mdFps = 0f;
     //-----------------------
 
     private final String TAG = "LOG.E";
@@ -69,7 +62,7 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
     public ARCoreRenderer(OverlayView overlay, Context context){
         this.context = context;
         this.overlay = overlay;
-        this.textFPS = ((Activity) this.context).findViewById(R.id.FPSText);
+        this.textFPS = ((Activity) this.context).findViewById(R.id.arFpsText);
         this.yuvToRgb = new YuvToRgbConverter(this.context);
     }
 
@@ -104,19 +97,7 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
 
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
 
-        long nowNs = System.nanoTime();
-
-        if (arLastTimeNs == 0) {
-            arLastTimeNs = nowNs;
-        }
-
-        arFrameCount++;
-        long diffNs = nowNs - arLastTimeNs;
-        if (diffNs >= 1_000_000_000L) { // 1 сек
-            arFps = arFrameCount * 1_000_000_000f / diffNs;
-            arFrameCount = 0;
-            arLastTimeNs = nowNs;
-        }
+        long startTimeArCore = System.nanoTime();
 
         try {
             // добавить FPS
@@ -140,43 +121,46 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
             // ----------- 1) Быстро считаем distance НА ЭТОМ кадре по lastBoxesImage -----------
             Image depthImage = null;
             try {
-                depthImage = frame.acquireDepthImage(); // deprecated warning ok
-//                depthImage = frame.acquireDepthImage16Bits();
+//                depthImage = frame.acquireDepthImage(); // deprecated warning ok
+                depthImage = frame.acquireDepthImage16Bits();
             } catch (Exception ignored) {}
 
-            // локальная копия списка, чтобы не словить гонки
             List<BoundingBox> boxesForThisFrame = lastBoxesImage;
             if (boxesForThisFrame == null) boxesForThisFrame = new ArrayList<>();
 
-            if (depthImage != null && !boxesForThisFrame.isEmpty()) {
-                // можно считать через кадр, если хочешь совсем экономно:
-                boolean doDepthNow = ((depthFrameCounter++ % 2) == 0);
+            if (depthImage!= null){
+                try{
+                    if (!boxesForThisFrame.isEmpty()) {
+                        // можно считать через кадр, если хочешь совсем экономно:
+                        boolean doDepthNow = ((depthFrameCounter++ % 2) == 0);
 
-                if (doDepthNow) {
-                    final int camW = frame.getCamera().getImageIntrinsics().getImageDimensions()[0];
-                    final int camH = frame.getCamera().getImageIntrinsics().getImageDimensions()[1];
+                        if (doDepthNow) {
+                            final int camW = frame.getCamera().getImageIntrinsics().getImageDimensions()[0];
+                            final int camH = frame.getCamera().getImageIntrinsics().getImageDimensions()[1];
 
-                    // если intrinsics вдруг не дали (редко), можно fallback на depth size скейлом,
-                    // но обычно intrinsics норм.
-                    for (BoundingBox b : boxesForThisFrame) {
-                        Float d = estimateDistanceMetersImagePixelsFast(depthImage, camW, camH, b);
+                            // если intrinsics вдруг не дали (редко), можно fallback на depth size скейлом,
+                            // но обычно intrinsics норм.
+                            for (BoundingBox b : boxesForThisFrame) {
+                                Float d = estimateDistanceMetersImagePixelsFast(depthImage, camW, camH, b);
 
-                        // EMA сглаживание по предыдущему значению В ЭТОМ ЖЕ объекте списка
-                        if (d != null) {
-                            Float prev = b.distanceMeters;
-                            if (prev != null) {
-                                float alpha = 0.35f;
-                                d = prev * (1f - alpha) + d * alpha;
+                                // EMA сглаживание по предыдущему значению В ЭТОМ ЖЕ объекте списка
+                                if (d != null) {
+                                    Float prev = b.distanceMeters;
+                                    if (prev != null) {
+                                        float alpha = 0.35f;
+                                        d = prev * (1f - alpha) + d * alpha;
+                                    }
+                                    b.distanceMeters = d;
+                                } else {
+                                    b.distanceMeters = null;
+                                }
                             }
-                            b.distanceMeters = d;
-                        } else {
-                            b.distanceMeters = null;
                         }
+                        depthImage.close();
                     }
+                }finally {
+                    depthImage.close();
                 }
-                depthImage.close();
-            } else {
-                if (depthImage != null) depthImage.close();
             }
 
             // ----------- 2) Рисуем overlay: маппим IMAGE_PIXELS -> VIEW каждый кадр -----------
@@ -230,25 +214,9 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
                     } catch (Exception e) {
                         Log.e(TAG, "ARCoreRenderer (onDrawFrame) errorInference error", e);
                     } finally {
-                        long now = System.nanoTime();
-                        if (mdLastTimeNs == 0) {
-                            mdLastTimeNs = now;
-                        }
-
-                        mdFrameCount++;
-                        long diff = now - mdLastTimeNs;
-
-                        if (diff >= 1_000_000_000L) {
-                            mdFps = mdFrameCount * 1_000_000_000f / diff;
-                            mdFrameCount = 0;
-                            mdLastTimeNs = now;
-
-                            ((Activity) context).runOnUiThread(() -> {
-                                textFPS.setText(String.format(fpsSTR, arFps, mdFps));
-                            });
-                        }
-
-
+                        ((Activity) context).runOnUiThread(() -> {
+                            textFPS.setText(String.format(fpsSTR, (System.nanoTime() - startTimeArCore)/1_000_000));
+                        });
                         inferenceBusy = false;
                         cameraImage.close();
                     }
