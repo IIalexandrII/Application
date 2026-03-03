@@ -1,0 +1,54 @@
+{
+  "Object_by_dangerous_levels": {
+    "0": [
+      { "name": "stairs_down", "id": 16, "description": "ступени вниз" },
+      { "name": "car", "id": 1, "description": "легковой автомобиль" },
+      { "name": "truck", "id": 14, "description": "грузовик" },
+      { "name": "motorcycle", "id": 15, "description": "мотоцикл" },
+      { "name": "bus", "id": 2, "description": "автобус" },
+      { "name": "bicycle", "id": 3, "description": "велосипед" },
+      { "name": "person", "id": 0, "description": "человек" },
+      { "name": "door", "id": 10, "description": "дверь" },
+      { "name": "open_manhole", "id": 24, "description": "открытый люк" },
+      { "name": "closed_manhole", "id": 25, "description": "закрытый люк" },
+      { "name": "knife", "id": 26, "description": "нож" }
+    ],
+    "1": [
+      { "name": "traffic_light", "id": 5, "description": "светофор" },
+      { "name": "traffic_sign", "id": 6, "description": "дорожный знак" },
+      { "name": "street_light", "id": 18, "description": "уличный свет" },
+      { "name": "waste_container", "id": 12, "description": "мусорка" },
+      { "name": "bench", "id": 7, "description": "скамейка" },
+      { "name": "dog", "id": 4, "description": "собака" },
+      { "name": "stroller", "id": 27, "description": "детская коляска" },
+      { "name": "scooter", "id": 28, "description": "самокат" },
+      { "name": "cone", "id": 29, "description": "дорожный конус" }
+    ],
+    "2": [
+      { "name": "computer_monitor", "id": 21, "description": "монитор компьютера" },
+      { "name": "table", "id": 9, "description": "стол" },
+      { "name": "chair", "id": 8, "description": "стул" },
+      { "name": "stool", "id": 23, "description": "стул" },
+      { "name": "cabinetry", "id": 19, "description": "мебель" },
+      { "name": "wardrobe", "id": 22, "description": "мебель" },
+      { "name": "filing_cabinet", "id": 20, "description": "Filing cabinet" },
+      { "name": "sofa", "id": 13, "description": "кресло" },
+      { "name": "flowerpot", "id": 11, "description": "горшок с растением" },
+      { "name": "lamp", "id": 17, "description": "лампа" }
+    ]
+  },
+  "feedback_template_vibration": {
+    "0": {
+      "timings": [10, 10, 10, 100, 100, 100, 10, 10, 10],
+      "amplitudes": [100, 100, 100, 255, 255, 255, 100, 100, 100]
+    },
+    "1": {
+      "timings": [100, 100, 100, 100, 100],
+      "amplitudes": [100, 100, 100, 100, 100]
+    },
+    "2": {
+      "timings": [50, 50, 50],
+      "amplitudes": [50, 50, 50]
+    }
+  }
+}

@@ -43,6 +43,19 @@
         />
 
     <TextView
+        android:id="@+id/testDirection"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="(имя):(направление)"
+        android:background="#AAFFFFAF"
+        android:textColor="@color/black"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        />
+
+    <TextView
         android:id="@+id/arFpsText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -80,7 +93,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="V 0.0.1-vulkan"
+        android:text="V 03.03.2026-vulkan"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@+id/btnUseAssetsFile"
         android:layout_marginBottom="10dp"
@@ -119,6 +132,5 @@
         app:layout_constraintBottom_toBottomOf="parent"
         android:layout_marginBottom="10dp"
         android:layout_marginEnd="10dp"/>
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -31,15 +31,17 @@ import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
 import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
-import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
+import com.google.gson.Gson;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
+import ru.nstu.navigator_arcore.conductorTools.ConductorSettings;
 import ru.nstu.navigator_arcore.modelTools.PostProcessor;
 import ru.nstu.navigator_arcore.renderer.ARCoreRenderer;
 import ru.nstu.navigator_arcore.tools.OverlayView;
@@ -55,8 +57,6 @@ public class MainActivity extends AppCompatActivity {
     private final String[] REQUIRED_PERMISSIONS = new String[] {"android.permission.CAMERA"};
 
     //---------------------------------------------Load File
-    private static final int PICK_MODEL_FILE = 1001;
-    private static final int PICK_CLASSES_FILE = 1002;
     private Uri modelUri;
     private Uri classesUri;
 
@@ -67,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
 
     //---------------------------------------------Model
     private Model YOLOModel;
-    private final String assetsFileModel = "best.pte";
+    private final String assetsFileModel = "2026_03_03_best.pte";
     private final String assetsFileClasses = "classes.txt";
     private File tempModelFile;
     private File tempClassesFile;
@@ -77,6 +77,10 @@ public class MainActivity extends AppCompatActivity {
     private GLSurfaceView glSurfaceView;
     private TextView reqText;
     private TextView loadModelText;
+
+    //---------------------------------------------FEEDBACK
+    private final String conductorConfigFileName = "config.json";
+    private Conductor conductor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -101,6 +105,10 @@ public class MainActivity extends AppCompatActivity {
             try{
                 this.YOLOModel = new Model(this.assetsFileModel,this.assetsFileClasses, this, true);
                 this.arcRenderer.setModel(this.YOLOModel);
+
+                this.conductor = new Conductor(this, getJsonFromAssets(conductorConfigFileName));
+                this.arcRenderer.setConductor(this.conductor);
+
                 this.loadModelText.setText("Загруженно из ASSETS\n"+YOLOModel.getUsageBackend()[0]);
             }catch (Exception e){
                 Log.e(this.TAG, this.START_MESSAGE + " (onCreate): ", e);
@@ -114,8 +122,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showSettingsDialog() {
-        View view = LayoutInflater.from(this)
-                .inflate(R.layout.dialog_settings, null);
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_settings, null);
 
         SeekBar seekConfidence = view.findViewById(R.id.seekConfidence);
         SeekBar seekIou = view.findViewById(R.id.seekIou);
@@ -125,7 +132,6 @@ public class MainActivity extends AppCompatActivity {
         TextView txtIou = view.findViewById(R.id.txtIou);
         TextView txtMax = view.findViewById(R.id.txtMax);
 
-        // Устанавливаем текущие значения
         seekConfidence.setProgress((int)(PostProcessor.getConfidenceThreshold() * 100));
         seekIou.setProgress((int)(PostProcessor.getIouThreshold() * 100));
         seekMax.setProgress(PostProcessor.getMaxDetections());
@@ -134,7 +140,6 @@ public class MainActivity extends AppCompatActivity {
         txtIou.setText(String.valueOf(PostProcessor.getIouThreshold()));
         txtMax.setText(String.valueOf(PostProcessor.getMaxDetections()));
 
-        // Listeners
         seekConfidence.setOnSeekBarChangeListener(new SimpleSeekListener(value -> {
             float v = value / 100f;
             PostProcessor.setConfidenceThreshold(v);
@@ -181,7 +186,9 @@ public class MainActivity extends AppCompatActivity {
     private Intent createPickModelIntent() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
+        intent.setType("application/octet-stream");
+        String[] mimeTypes = {"application/octet-stream"};
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
         return intent;
     }
     private Intent createPickClassesIntent() {
@@ -210,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
                 tempModelFile = copyUriToCache(modelUri, "tempModel.torchscript");
                 tempClassesFile = copyUriToCache(classesUri, "tempClasses.txt");
 
-                // Load PyTorch model
+                // Load model
                 YOLOModel = new Model(tempModelFile.getAbsolutePath(), tempClassesFile.getAbsolutePath(),this,false);
 
                 if (arcRenderer != null) arcRenderer.setModel(YOLOModel);
@@ -249,6 +256,22 @@ public class MainActivity extends AppCompatActivity {
         return result;
     }
     //---------------------------------------------
+
+    public ConductorSettings getJsonFromAssets(String fileName) {
+        String jsonString;
+        try {
+            InputStream is = getAssets().open(fileName);
+            int size = is.available();
+            byte[] buffer = new byte[size];
+            is.read(buffer);
+            is.close();
+            jsonString = new String(buffer, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Log.e(TAG, "Error loading conductor settings", e);
+            return null;
+        }
+        return new Gson().fromJson(jsonString, ConductorSettings.class);
+    }
 
     private boolean _checkPermission(){
         for(String perm : REQUIRED_PERMISSIONS){

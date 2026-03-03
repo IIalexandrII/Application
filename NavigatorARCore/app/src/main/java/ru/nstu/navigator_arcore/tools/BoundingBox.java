@@ -20,7 +20,6 @@ public class BoundingBox {
     public BoundingBox(RectF rect, float score, int clazz) {
         // Сохраняю геометрию рамки
         this.rect = rect;
-
         // Сохраняю confidence детекции
         this.score = score;
 

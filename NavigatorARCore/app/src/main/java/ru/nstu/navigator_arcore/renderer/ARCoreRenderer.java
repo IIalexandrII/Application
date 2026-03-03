@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
+import ru.nstu.navigator_arcore.Conductor;
 import ru.nstu.navigator_arcore.Model;
 import ru.nstu.navigator_arcore.R;
 import ru.nstu.navigator_arcore.tools.BoundingBox;
@@ -59,6 +60,8 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
 
     private YuvToRgbConverter yuvToRgb;
 
+    private Conductor conductor;
+
     public ARCoreRenderer(OverlayView overlay, Context context){
         this.context = context;
         this.overlay = overlay;
@@ -69,6 +72,8 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
     public void setModel(Model model) {
         this.model = model;
     }
+
+    public void setConductor(Conductor conductor){this.conductor = conductor;}
 
     public void setSession(Session session){
         this.session = session;
@@ -100,7 +105,6 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
         long startTimeArCore = System.nanoTime();
 
         try {
-            // добавить FPS
             int rotation = ((Activity) context).getWindowManager().getDefaultDisplay().getRotation();
             session.setDisplayGeometry(rotation, viewportWidth, viewportHeight);
 
@@ -121,8 +125,8 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
             // ----------- 1) Быстро считаем distance НА ЭТОМ кадре по lastBoxesImage -----------
             Image depthImage = null;
             try {
-//                depthImage = frame.acquireDepthImage(); // deprecated warning ok
-                depthImage = frame.acquireDepthImage16Bits();
+                depthImage = frame.acquireDepthImage(); // deprecated warning ok
+//                depthImage = frame.acquireDepthImage16Bits();
             } catch (Exception ignored) {}
 
             List<BoundingBox> boxesForThisFrame = lastBoxesImage;
@@ -169,7 +173,9 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
                 for (BoundingBox b : boxesForThisFrame) {
                     viewBoxes.add(mapImagePixelsToView(frame, b));
                 }
-
+                if( this.conductor != null){
+                    conductor.notification(viewBoxes);
+                }
                 ((Activity) context).runOnUiThread(() -> {
                     overlay.setResults(viewBoxes, model.Classes);
                 });
@@ -211,6 +217,7 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
                     try {
                         List<BoundingBox> boxesImg = model.analyzeImage(finalCurrentBitmap, cameraImage.getWidth(), cameraImage.getHeight(), rotation);
                         lastBoxesImage = (boxesImg != null) ? boxesImg : new ArrayList<>();
+
                     } catch (Exception e) {
                         Log.e(TAG, "ARCoreRenderer (onDrawFrame) errorInference error", e);
                     } finally {
@@ -237,7 +244,7 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
         int depthW = depthImage.getWidth();
         int depthH = depthImage.getHeight();
 
-        // Берём нижнюю часть бокса (как у тебя) — там обычно depth стабильнее
+        // Берём нижнюю часть бокса — там обычно depth стабильнее
         float left = box.rect.left + box.rect.width() * 0.30f;
         float right = box.rect.left + box.rect.width() * 0.70f;
         float top = box.rect.top + box.rect.height() * 0.65f;

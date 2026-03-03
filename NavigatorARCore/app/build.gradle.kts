@@ -18,6 +18,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+
     androidResources {
         noCompress += "pte"
     }
@@ -29,6 +30,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            isDebuggable = true
         }
     }
     compileOptions {
@@ -53,4 +57,6 @@ dependencies {
     implementation("org.pytorch:executorch-android-vulkan:1.1.0")
 
     implementation("com.google.ar:core:1.33.0")
+
+    implementation("com.google.code.gson:gson:2.10.1")
 }
