@@ -46,9 +46,6 @@ public class Model {
     private final Rect srcRect = new Rect();
     private final Rect dstRect = new Rect(0, 0, IN_W, IN_H);
 
-    // testing
-//    private ImageView debugImage;
-
 
     private String LATtext = "(ms) Func LAT: %d | forward LAT: %d";
     private TextView LATTextView;
@@ -72,13 +69,11 @@ public class Model {
             this._loadClassesFromPath(classesPath);
         }
 
-        Log.d("TESTTEST", Arrays.toString(this.getUsageBackend()));
         this.backend = this.getUsageBackend()[0];
 
         inputBitmap = Bitmap.createBitmap(IN_W, IN_H, Bitmap.Config.ARGB_8888);
         inputCanvas = new Canvas(inputBitmap);
 
-//        this.debugImage = this.activity.findViewById(R.id.debugImage);
         this.LATTextView = this.activity.findViewById(R.id.yoloFpsText);
     }
 
@@ -191,10 +186,6 @@ public class Model {
         srcRect.set(cropX, cropY, cropX + cropSize, cropY + cropSize);
 
         inputCanvas.drawBitmap(image, srcRect, dstRect, null);
-
-//        activity.runOnUiThread(() -> {
-//            debugImage.setImageBitmap(inputBitmap);
-//        });
 
         Tensor input = TensorImageUtils.bitmapToFloat32Tensor(inputBitmap, TensorImageUtils.TORCHVISION_NORM_MEAN_RGB, TensorImageUtils.TORCHVISION_NORM_STD_RGB);
         long forwardTime = System.nanoTime();

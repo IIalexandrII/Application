@@ -69,15 +69,15 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
         this.yuvToRgb = new YuvToRgbConverter(this.context);
     }
 
-    public void setModel(Model model) {
-        this.model = model;
-    }
+        public void setModel(Model model) {
+            this.model = model;
+        }
 
-    public void setConductor(Conductor conductor){this.conductor = conductor;}
+        public void setConductor(Conductor conductor){this.conductor = conductor;}
 
-    public void setSession(Session session){
-        this.session = session;
-    }
+        public void setSession(Session session){
+            this.session = session;
+        }
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {

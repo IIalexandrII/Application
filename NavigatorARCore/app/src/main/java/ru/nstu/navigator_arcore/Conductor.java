@@ -62,15 +62,6 @@ public class Conductor implements TextToSpeech.OnInitListener {
     public void notification(List<BoundingBox> bboxes) {
         if (bboxes == null || bboxes.isEmpty()) return;
 
-        Set<Voice> voices = tts.getVoices();
-        Log.d("TESTTEST","==================================");
-        for (Voice voice : voices) {
-            if (voice.getLocale().getLanguage().equals("ru") && voice.getName().contains("local")) {
-                Log.d("TESTTEST",voice.getName());
-            }
-        }
-        Log.d("TESTTEST","==================================");
-
         BoundingBox priorityBox = null;
         float minDist = bboxes.get(0).distanceMeters == null ? 10000 : bboxes.get(0).distanceMeters;
 
