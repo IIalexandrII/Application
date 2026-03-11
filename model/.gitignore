@@ -1,8 +1,0 @@
-*.pt
-*.pte
-*.txt
-
-/yolo26l_executorch_model
-/yolo26m_executorch_model
-/yolo26x_executorch_model
-/.env
