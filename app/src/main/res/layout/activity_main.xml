@@ -54,21 +54,12 @@
         android:text="ARCore LAT:"
         android:textColor="@color/black"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/yoloFpsText"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/loadModelText"
         android:layout_marginTop="8dp"
         />
 
-    <TextView
-        android:id="@+id/yoloFpsText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="(ms) Func LAT:  | forward LAT: "
-        android:textColor="@color/black"
-        app:layout_constraintStart_toEndOf="@id/arFpsText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@id/arFpsText"
-        />
+
 
 
     <TextView

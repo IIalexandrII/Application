@@ -20,7 +20,7 @@ android {
 
 
     androidResources {
-        noCompress += "pte"
+        noCompress += "tflite"
     }
 
     buildTypes {
@@ -54,7 +54,11 @@ dependencies {
 //    implementation("org.pytorch:pytorch_android_torchvision:2.1.0")
 
 //    implementation("org.pytorch:executorch-android:1.1.0")
-    implementation("org.pytorch:executorch-android-vulkan:1.1.0")
+//    implementation("org.pytorch:executorch-android-vulkan:1.1.0")
+    val tfliteVersion = "2.14.0"
+    implementation("org.tensorflow:tensorflow-lite:${tfliteVersion}")
+    implementation("org.tensorflow:tensorflow-lite-gpu:${tfliteVersion}")
+    implementation("org.tensorflow:tensorflow-lite-gpu-api:${tfliteVersion}")
 
     implementation("com.google.ar:core:1.33.0")
 

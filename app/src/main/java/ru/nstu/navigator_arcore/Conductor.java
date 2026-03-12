@@ -2,6 +2,7 @@ package ru.nstu.navigator_arcore;
 
 import android.app.Activity;
 import android.content.Context;
+import android.media.Image;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.speech.tts.TextToSpeech;
@@ -22,7 +23,6 @@ import ru.nstu.navigator_arcore.tools.BoundingBox;
 public class Conductor implements TextToSpeech.OnInitListener {
     // поля компонент и настроек
     private Context context;
-    private Vibrator vibrator;
     private ConductorSettings settings;
     private TextToSpeech tts;
 
@@ -30,20 +30,18 @@ public class Conductor implements TextToSpeech.OnInitListener {
     private int wWidth, wHeight;
     private int gridCellWidth, gridCellHeight;
 
-    // задержка вибрации
-    private long lastVibrationTime = 0;
-    private static final long COOLDOWN = 1000;
-
-    // озвучки вибрации
+    // тайминги озвучки
     private long lastSpeechTime = 0;
     private static final long SPEECH_COOLDOWN = 5000;
+
+    // вибрация по дистанции
+    private DepthObstacleDetector depthObstacleDetector;
 
     //test----------------------
     TextView speakerText;
 
     public Conductor(Context context, ConductorSettings settings){
         this.context = context;
-        this.vibrator = (Vibrator) this.context.getSystemService(Context.VIBRATOR_SERVICE);
         this.settings = settings;
 
         DisplayMetrics dMetrics = new DisplayMetrics();
@@ -57,37 +55,16 @@ public class Conductor implements TextToSpeech.OnInitListener {
         this.gridCellWidth  = this.wWidth  / 3;
 
         this.speakerText = ((Activity) this.context).findViewById(R.id.testDirection);
+
+        this.depthObstacleDetector = new DepthObstacleDetector(context);
     }
 
+    public void notification(List<BoundingBox> bboxes, Image depthImage){
+        this.notification(bboxes);
+        depthObstacleDetector.processDepth(depthImage);
+    }
     public void notification(List<BoundingBox> bboxes) {
         if (bboxes == null || bboxes.isEmpty()) return;
-
-        BoundingBox priorityBox = null;
-        float minDist = bboxes.get(0).distanceMeters == null ? 10000 : bboxes.get(0).distanceMeters;
-
-        // Сначала определяем приоритетный по дистанции
-        for (BoundingBox box : bboxes) {
-            if(box.distanceMeters == null) continue;
-            if (box.distanceMeters < minDist) {
-                minDist = box.distanceMeters;
-                priorityBox = box;
-            }
-        }
-        // Если по дистанции не получилось то по степени опасности
-        if(priorityBox == null) {
-            Integer highestDanger = 3; // 0 - макс, 1 - средн, 2 - низк, 3 - нет в списке
-
-            for (BoundingBox box : bboxes) {
-                int level = getDangerLevel(box.clazz);
-                if (level < highestDanger) {
-                    highestDanger = level;
-                    priorityBox = box;
-                }
-                if (highestDanger == 0) break;
-            }
-        }
-
-        if (priorityBox == null) return;
 
         sortByDistance(bboxes);
 
@@ -109,15 +86,12 @@ public class Conductor implements TextToSpeech.OnInitListener {
             }
         }
 
+
         ((Activity) this.context).runOnUiThread(()->{
             this.speakerText.setText(TempText.toString());
         });
 
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastVibrationTime > COOLDOWN) {
-            triggerVibration(getDangerLevel(priorityBox.clazz));
-            lastVibrationTime = currentTime;
-        }
 
         if (currentTime - lastSpeechTime > SPEECH_COOLDOWN) {
             speak(speechBuilder.toString());
@@ -153,12 +127,6 @@ public class Conductor implements TextToSpeech.OnInitListener {
             tts.setSpeechRate(1.5f);
             tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "NotificationID");
         }
-    }
-
-    private void triggerVibration(int level) {
-        VibrationPatterns pattern = settings.feedbackTemplateVibration.get(level);
-        if (pattern == null || vibrator == null || !vibrator.hasVibrator()) return;
-        vibrator.vibrate(VibrationEffect.createWaveform(pattern.timings, pattern.amplitudes, -1));
     }
 
     //===================================================================================

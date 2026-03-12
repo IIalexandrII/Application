@@ -49,10 +49,9 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
     private Model model;
     private OverlayView overlay;
 
+    private Bitmap cameraBitmap;
     private volatile List<BoundingBox> lastBoxesImage = new ArrayList<>();
     private int depthFrameCounter = 0;
-    private volatile boolean inferenceBusy = false;
-    private final ExecutorService inferenceExecutor = Executors.newSingleThreadExecutor();
 
     private final int bufferSize = 5;
     private Bitmap[] bufferImages = new Bitmap[bufferSize];
@@ -126,7 +125,6 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
             Image depthImage = null;
             try {
                 depthImage = frame.acquireDepthImage(); // deprecated warning ok
-//                depthImage = frame.acquireDepthImage16Bits();
             } catch (Exception ignored) {}
 
             List<BoundingBox> boxesForThisFrame = lastBoxesImage;
@@ -160,11 +158,8 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
                                 }
                             }
                         }
-                        depthImage.close();
                     }
-                }finally {
-                    depthImage.close();
-                }
+                } catch (Exception ignored) {}
             }
 
             // ----------- 2) Рисуем overlay: маппим IMAGE_PIXELS -> VIEW каждый кадр -----------
@@ -174,7 +169,12 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
                     viewBoxes.add(mapImagePixelsToView(frame, b));
                 }
                 if( this.conductor != null){
-                    conductor.notification(viewBoxes);
+                    if(depthImage != null){
+                        conductor.notification(viewBoxes, depthImage);
+                        depthImage.close();
+                    }else {
+                        conductor.notification(viewBoxes);
+                    }
                 }
                 ((Activity) context).runOnUiThread(() -> {
                     overlay.setResults(viewBoxes, model.Classes);
@@ -193,9 +193,17 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
             } catch (Exception e) {
                 return;
             }
-            Bitmap currentBitmap = Bitmap.createBitmap(cameraImage.getWidth(), cameraImage.getHeight(), Bitmap.Config.ARGB_8888);
+            if (cameraBitmap == null) {
+                cameraBitmap = Bitmap.createBitmap(
+                        cameraImage.getWidth(),
+                        cameraImage.getHeight(),
+                        Bitmap.Config.ARGB_8888
+                );
+            }
+
+            yuvToRgb.yuvToRgb(cameraImage, cameraBitmap);
+            Bitmap currentBitmap = cameraBitmap;
             if(cameraImage != null) {
-                yuvToRgb.yuvToRgb(cameraImage, currentBitmap);
                 currentBitmap = ImageTools.rotateBitmap(currentBitmap, rotation);
 
                 if (this.bufferCurrentSize < this.bufferSize) {
@@ -210,25 +218,22 @@ public class ARCoreRenderer implements GLSurfaceView.Renderer {
                 }
             }
 
-            if (!inferenceBusy && this.bufferCurrentSize == this.bufferSize) {
-                inferenceBusy = true;
+            if (this.bufferCurrentSize == this.bufferSize) {
                 Bitmap finalCurrentBitmap = currentBitmap;
-                inferenceExecutor.execute(() -> {
-                    try {
-                        List<BoundingBox> boxesImg = model.analyzeImage(finalCurrentBitmap, cameraImage.getWidth(), cameraImage.getHeight(), rotation);
-                        lastBoxesImage = (boxesImg != null) ? boxesImg : new ArrayList<>();
-
-                    } catch (Exception e) {
-                        Log.e(TAG, "ARCoreRenderer (onDrawFrame) errorInference error", e);
-                    } finally {
-                        ((Activity) context).runOnUiThread(() -> {
-                            textFPS.setText(String.format(fpsSTR, (System.nanoTime() - startTimeArCore)/1_000_000));
-                        });
-                        inferenceBusy = false;
-                        cameraImage.close();
-                    }
-                });
-
+                try {
+                    List<BoundingBox> boxesImg = model.analyzeImageAsync(finalCurrentBitmap, cameraImage.getWidth(), cameraImage.getHeight(), rotation);
+                    lastBoxesImage = (boxesImg != null) ? boxesImg : new ArrayList<>();
+                } catch (Exception e) {
+                    Log.e(TAG, "ARCoreRenderer (onDrawFrame) errorInference error", e);
+                } finally {
+                    ((Activity) context).runOnUiThread(() -> {
+                        if (textFPS != null) {
+                            String info = String.format("Total: %.1fms | Inference: %.1fms", model.getLastTotalMs(), model.getLastRunMs());
+                            textFPS.setText(info);
+                        }
+                    });
+                    cameraImage.close();
+                }
             } else {
                 cameraImage.close();
             }

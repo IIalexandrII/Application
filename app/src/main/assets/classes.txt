@@ -1,1 +1,30 @@
-Person,Car,Bus,Bicycle,Dog,Traffic light,Traffic sign,Bench,Chair,Table,Door,Flowerpot,Waste container,Sofa bed,Truck,Motorcycle,Stairs,Lamp,Street light,Cabinetry,Filing cabinet,Computer monitor,Wardrobe,Stool,Open Manhole,Closed Manhole,Knife,Stroller,Scooter,Cone
+Person
+Car
+Bus
+Bicycle
+Dog
+Traffic light
+Traffic sign
+Bench
+Chair
+Table
+Door
+Flowerpot
+Waste container
+Sofa bed
+Truck
+Motorcycle
+Stairs
+Lamp
+Street light
+Cabinetry
+Filing cabinet
+Computer monitor
+Wardrobe
+Stool
+Open Manhole
+Closed Manhole
+Knife
+Stroller
+Scooter
+Cone

@@ -42,7 +42,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 import ru.nstu.navigator_arcore.conductorTools.ConductorSettings;
-import ru.nstu.navigator_arcore.modelTools.PostProcessor;
 import ru.nstu.navigator_arcore.renderer.ARCoreRenderer;
 import ru.nstu.navigator_arcore.tools.OverlayView;
 import ru.nstu.navigator_arcore.tools.SimpleSeekListener;
@@ -67,7 +66,7 @@ public class MainActivity extends AppCompatActivity {
 
     //---------------------------------------------Model
     private Model YOLOModel;
-    private final String assetsFileModel = "2026_03_03_best.pte";
+    private final String assetsFileModel = "2026_03_06_best.tflite";
     private final String assetsFileClasses = "classes.txt";
     private File tempModelFile;
     private File tempClassesFile;
@@ -103,13 +102,12 @@ public class MainActivity extends AppCompatActivity {
 
         findViewById(R.id.btnUseAssetsFile).setOnClickListener(event->{
             try{
-                this.YOLOModel = new Model(this.assetsFileModel,this.assetsFileClasses, this, true);
-                this.arcRenderer.setModel(this.YOLOModel);
+                initModel(assetsFileModel,assetsFileClasses);
 
                 this.conductor = new Conductor(this, getJsonFromAssets(conductorConfigFileName));
                 this.arcRenderer.setConductor(this.conductor);
 
-                this.loadModelText.setText("Загруженно из ASSETS\n"+YOLOModel.getUsageBackend()[0]);
+                this.loadModelText.setText("Загруженно из ASSETS");
             }catch (Exception e){
                 Log.e(this.TAG, this.START_MESSAGE + " (onCreate): ", e);
             }
@@ -132,28 +130,28 @@ public class MainActivity extends AppCompatActivity {
         TextView txtIou = view.findViewById(R.id.txtIou);
         TextView txtMax = view.findViewById(R.id.txtMax);
 
-        seekConfidence.setProgress((int)(PostProcessor.getConfidenceThreshold() * 100));
-        seekIou.setProgress((int)(PostProcessor.getIouThreshold() * 100));
-        seekMax.setProgress(PostProcessor.getMaxDetections());
+        seekConfidence.setProgress((int)(Model.getCONF() * 100));
+        seekIou.setProgress((int)(Model.getNMS_IOU() * 100));
+        seekMax.setProgress(Model.getMAX_DETS());
 
-        txtConfidence.setText(String.valueOf(PostProcessor.getConfidenceThreshold()));
-        txtIou.setText(String.valueOf(PostProcessor.getIouThreshold()));
-        txtMax.setText(String.valueOf(PostProcessor.getMaxDetections()));
+        txtConfidence.setText(String.valueOf(Model.getCONF()));
+        txtIou.setText(String.valueOf(Model.getNMS_IOU()));
+        txtMax.setText(String.valueOf(Model.getMAX_DETS()));
 
         seekConfidence.setOnSeekBarChangeListener(new SimpleSeekListener(value -> {
             float v = value / 100f;
-            PostProcessor.setConfidenceThreshold(v);
+            Model.setCONF(v);
             txtConfidence.setText(String.format("%.2f", v));
         }));
 
         seekIou.setOnSeekBarChangeListener(new SimpleSeekListener(value -> {
             float v = value / 100f;
-            PostProcessor.setIouThreshold(v);
+            Model.setNMS_IOU(v);
             txtIou.setText(String.format("%.2f", v));
         }));
 
         seekMax.setOnSeekBarChangeListener(new SimpleSeekListener(value -> {
-            PostProcessor.setMaxDetections(value);
+            Model.setMAX_DETS(value);
             txtMax.setText(String.valueOf(value));
         }));
 
@@ -213,16 +211,12 @@ public class MainActivity extends AppCompatActivity {
     private void loadExternalModel() {
         if (modelUri != null && classesUri != null) {
             try {
-                // Copy to cache
-                tempModelFile = copyUriToCache(modelUri, "tempModel.torchscript");
-                tempClassesFile = copyUriToCache(classesUri, "tempClasses.txt");
+                tempModelFile = copyUriToCache(modelUri, "model.tflite");
+                tempClassesFile = copyUriToCache(classesUri, "classes.txt");
 
-                // Load model
-                YOLOModel = new Model(tempModelFile.getAbsolutePath(), tempClassesFile.getAbsolutePath(),this,false);
+                initModel(tempModelFile.getAbsolutePath(), tempClassesFile.getAbsolutePath());
 
-                if (arcRenderer != null) arcRenderer.setModel(YOLOModel);
-
-                loadModelText.setText("Загружено: " + getFileNameFromUri(modelUri)+"\n"+YOLOModel.getUsageBackend()[0]);
+                loadModelText.setText("Загружено: " + getFileNameFromUri(modelUri));
 
             } catch (Exception e) {
                 Log.e(TAG, "Error loading external model", e);
@@ -254,6 +248,22 @@ public class MainActivity extends AppCompatActivity {
             result = uri.getLastPathSegment();
         }
         return result;
+    }
+
+    private void initModel(String modelPath, String labelsPath) {
+        if (YOLOModel != null) {
+            YOLOModel.close();
+        }
+        try {
+            YOLOModel = new Model(modelPath, labelsPath, this, true);
+
+            if (arcRenderer != null) {
+                arcRenderer.setModel(YOLOModel);
+            }
+            Log.i(TAG, "Model loaded from: " + modelPath);
+        } catch (IOException e) {
+            Log.e(TAG, "Inference logic failed", e);
+        }
     }
     //---------------------------------------------
 
@@ -363,7 +373,7 @@ public class MainActivity extends AppCompatActivity {
            mSession = null;
         }
         if(YOLOModel != null){
-            YOLOModel.destroy();
+            YOLOModel.close();
             YOLOModel = null;
         }
         super.onDestroy();
